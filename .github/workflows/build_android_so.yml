@@ -25,14 +25,13 @@ jobs:
 
       - name: Generate FlatBuffers Header on Host
         run: |
-          # بیلد سریع کامپایلر بومی flatc و ساخت هدر
           git clone --depth 1 https://github.com/google/flatbuffers.git host_flatbuffers
           cmake -B host_flatc_build -S host_flatbuffers -DFLATBUFFERS_BUILD_TESTS=OFF
           cmake --build host_flatc_build --target flatc -j$(nproc)
           
-          # ساخت هدر sentencepiece_lite_generated.h
+          # تولید هدر رسمی sentencepiece_lite_generated.h در روت و پوشه lite
           ./host_flatc_build/flatc --cpp --scoped-enums -o lite/ lite/sentencepiece_lite.fbs
-          ls -l lite/sentencepiece_lite_generated.h
+          cp lite/sentencepiece_lite_generated.h ./
 
       - name: Compile .so directly using Android Clang
         run: |
@@ -41,11 +40,10 @@ jobs:
           
           mkdir -p output/${{ matrix.abi }}
           
-          # کامپایل مستقیم با Clang NDK
+          # کامپایل مستقیم سورس‌های واقعی
           $CXX -std=c++20 -O3 -fPIC -shared \
             -I. -Ilite -Ihost_flatbuffers/include \
             lite/sentencepiece_lite.cc \
-            lite/sentencepiece_lite_encoder.cc \
             lite/jni_wrapper.cc \
             -llog \
             -o output/${{ matrix.abi }}/libsentencepiece_lite.so
