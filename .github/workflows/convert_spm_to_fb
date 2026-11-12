@@ -1,0 +1,51 @@
+name: Convert spiece.model to FlatBuffers (.spm.fb)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  convert-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libprotobuf-dev protobuf-compiler libabsl-dev flatbuffers-compiler libflatbuffers-dev ninja-build
+
+      - name: Download Official spiece.model (837KB)
+        run: |
+          # دریافت مستقیم فایل دقیق مربوط به albert-fa-zwnj-base-v2 از هاگینگ‌فیس
+          curl -L -o spiece.model "https://huggingface.co/HooshvareLab/albert-fa-zwnj-base-v2/resolve/main/spiece.model"
+          ls -lh spiece.model
+
+      - name: Build spm_to_fb Converter Tool
+        run: |
+          mkdir -p build_converter
+          cd build_converter
+          
+          # بیلد بومی برای لینوکس x86_64 روی رانر گیت‌هاب
+          cmake ../lite \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSPM_ENABLE_BENCHMARK=OFF \
+            -DBUILD_TESTING=OFF
+            
+          ninja spm_to_fb
+          ls -lh spm_to_fb
+
+      - name: Convert Model to FlatBuffers
+        run: |
+          ./build_converter/spm_to_fb \
+            --model_file=spiece.model \
+            --output_file=spiece.spm.fb
+            
+          ls -lh spiece.spm.fb
+
+      - name: Upload Converted Model Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentencepiece-flatbuffer-model
+          path: spiece.spm.fb
