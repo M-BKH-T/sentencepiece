@@ -13,6 +13,13 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Install Host FlatBuffers Compiler (flatc)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatbuffers-compiler
+          which flatc
+          flatc --version
+
       - name: Set up NDK
         uses: nttld/setup-ndk@v1
         with:
@@ -30,11 +37,11 @@ jobs:
             -DANDROID_PLATFORM=android-21 \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_STANDARD=20 \
+            -DFLATBUFFERS_FLATC_EXECUTABLE=/usr/bin/flatc \
             -DBUILD_SHARED_LIBS=ON
             
           cmake --build . --config Release --target sentencepiece_lite -j$(nproc)
           
-          # پوشه خروجی منظم مخصوص jniLibs اندروید
           mkdir -p output/${{ matrix.abi }}
           find . -name "*.so" -exec cp {} output/${{ matrix.abi }}/ \;
 
