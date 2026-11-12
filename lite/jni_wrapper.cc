@@ -5,14 +5,12 @@
 #include <memory>
 #include "sentencepiece_lite.h"
 
-#ifdef SENTENCEPIECE_LITE_NAMESPACE
-using namespace sentencepiece::lite;
-#else
-using namespace sentencepiece;
-#endif
+using sentencepiece::lite::SentencePieceLiteProcessor;
+using sentencepiece::lite::StatusCode;
 
-// نگهداری نمونه به صورت سراسری در Native
-static std::unique_ptr<SentencePieceProcessor> g_sp = nullptr;
+// نگهداری بافر مدل و نمونه پردازشگر در حافظه Native
+static std::shared_ptr<std::string> g_model_buffer = nullptr;
+static std::unique_ptr<SentencePieceLiteProcessor> g_sp = nullptr;
 
 extern "C" {
 
@@ -28,14 +26,14 @@ Java_com_logcat_puncfixer_SentencePieceLite_loadModel(
     jbyte* buf = env->GetByteArrayElements(model_buffer, nullptr);
     if (!buf) return JNI_FALSE;
 
-    std::string_view buffer_view(reinterpret_cast<const char*>(buf), len);
-    
-    g_sp = std::make_unique<SentencePieceProcessor>();
-    auto status = g_sp->LoadFromBuffer(buffer_view);
-    
+    // نگهداری بافر مدل در رم جهت ارجاع مستقیم
+    g_model_buffer = std::make_shared<std::string>(reinterpret_cast<const char*>(buf), len);
     env->ReleaseByteArrayElements(model_buffer, buf, JNI_ABORT);
+
+    // ساخت پردازشگر با انتقال مالکیت بافر
+    g_sp = std::make_unique<SentencePieceLiteProcessor>(g_model_buffer);
     
-    return status.ok() ? JNI_TRUE : JNI_FALSE;
+    return (g_sp->status() == StatusCode::kOk) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jintArray JNICALL
@@ -47,14 +45,15 @@ Java_com_logcat_puncfixer_SentencePieceLite_encode(
     if (!g_sp || text == nullptr) return nullptr;
 
     const char* native_str = env->GetStringUTFChars(text, nullptr);
-    std::string_view sv(native_str);
+    if (!native_str) return nullptr;
 
+    std::string_view sv(native_str);
     std::vector<int> ids;
     auto status = g_sp->Encode(sv, &ids);
     
     env->ReleaseStringUTFChars(text, native_str);
 
-    if (!status.ok()) return nullptr;
+    if (status != StatusCode::kOk) return nullptr;
 
     jintArray result = env->NewIntArray(ids.size());
     if (result == nullptr) return nullptr;
