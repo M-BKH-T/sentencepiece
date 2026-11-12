@@ -1,0 +1,45 @@
+name: Build Android NDK Shared Libraries (.so)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86_64]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: true
+
+      - name: Compile SentencePiece Lite shared library (.so)
+        run: |
+          mkdir -p build_${{ matrix.abi }}
+          cd build_${{ matrix.abi }}
+          
+          cmake ../lite \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=${{ matrix.abi }} \
+            -DANDROID_PLATFORM=android-21 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DBUILD_SHARED_LIBS=ON
+            
+          cmake --build . --config Release --target sentencepiece_lite -j$(nproc)
+          
+          # پوشه خروجی منظم مخصوص jniLibs اندروید
+          mkdir -p output/${{ matrix.abi }}
+          find . -name "*.so" -exec cp {} output/${{ matrix.abi }}/ \;
+
+      - name: Upload ABI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentencepiece-lite-${{ matrix.abi }}
+          path: build_${{ matrix.abi }}/output/
