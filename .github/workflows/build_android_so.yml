@@ -13,20 +13,20 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Host FlatBuffers Compiler (flatc)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y flatbuffers-compiler
-          which flatc
-          flatc --version
-
       - name: Set up NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26d
           add-to-path: true
 
-      - name: Compile SentencePiece Lite shared library (.so)
+      - name: Ensure JNI wrapper is linked
+        run: |
+          if [ -f lite/jni_wrapper.cc ] && ! grep -q "jni_wrapper" lite/sentencepiece_lite.cc; then
+            echo "" >> lite/sentencepiece_lite.cc
+            echo '#include "jni_wrapper.cc"' >> lite/sentencepiece_lite.cc
+          fi
+
+      - name: Configure CMake for Android ABI
         run: |
           mkdir -p build_${{ matrix.abi }}
           cd build_${{ matrix.abi }}
@@ -37,11 +37,29 @@ jobs:
             -DANDROID_PLATFORM=android-21 \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_STANDARD=20 \
-            -DFLATBUFFERS_FLATC_EXECUTABLE=/usr/bin/flatc \
             -DBUILD_SHARED_LIBS=ON
-            
+
+      - name: Build Host flatc & Replace Native Binary
+        run: |
+          cd build_${{ matrix.abi }}
+          
+          # ۱. بیلد کامپایلر flatc مخصوص هاست اوبونتو با سورس دانلود شده
+          cmake -B host_flatc_build -S _deps/flatbuffers-src -DFLATBUFFERS_BUILD_TESTS=OFF
+          cmake --build host_flatc_build --target flatc -j$(nproc)
+          
+          # ۲. ساخت اولیه تارگت flatc در بیلد اصلی
+          cmake --build . --target flatc -j$(nproc)
+          
+          # ۳. جایگزینی باینری هاست به جای باینری کراس‌شده اندروید
+          cp -f host_flatc_build/flatc _deps/flatbuffers-build/flatc
+          chmod +x _deps/flatbuffers-build/flatc
+
+      - name: Compile SentencePiece Lite shared library (.so)
+        run: |
+          cd build_${{ matrix.abi }}
           cmake --build . --config Release --target sentencepiece_lite -j$(nproc)
           
+          # پوشه‌بندی استاندارد jniLibs
           mkdir -p output/${{ matrix.abi }}
           find . -name "*.so" -exec cp {} output/${{ matrix.abi }}/ \;
 
