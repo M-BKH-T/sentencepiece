@@ -17,7 +17,6 @@ jobs:
 
       - name: Download Official spiece.model (837KB)
         run: |
-          # دریافت مستقیم فایل دقیق مربوط به albert-fa-zwnj-base-v2 از هاگینگ‌فیس
           curl -L -o spiece.model "https://huggingface.co/HooshvareLab/albert-fa-zwnj-base-v2/resolve/main/spiece.model"
           ls -lh spiece.model
 
@@ -25,23 +24,19 @@ jobs:
         run: |
           mkdir -p build_converter
           cd build_converter
-          
-          # بیلد بومی برای لینوکس x86_64 روی رانر گیت‌هاب
           cmake ../lite \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DSPM_ENABLE_BENCHMARK=OFF \
             -DBUILD_TESTING=OFF
-            
           ninja spm_to_fb
           ls -lh spm_to_fb
 
       - name: Convert Model to FlatBuffers
         run: |
           ./build_converter/spm_to_fb \
-            --model_file=spiece.model \
-            --output_file=spiece.spm.fb
-            
+            --model=spiece.model \
+            --output=spiece.spm.fb
           ls -lh spiece.spm.fb
 
       - name: Upload Converted Model Artifact
