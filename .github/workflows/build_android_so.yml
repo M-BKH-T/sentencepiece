@@ -29,8 +29,8 @@ jobs:
           cmake -B host_flatc_build -S host_flatbuffers -DFLATBUFFERS_BUILD_TESTS=OFF
           cmake --build host_flatc_build --target flatc -j$(nproc)
           
-          # تولید هدر رسمی sentencepiece_lite_generated.h در روت و پوشه lite
-          ./host_flatc_build/flatc --cpp --scoped-enums -o lite/ lite/sentencepiece_lite.fbs
+          # تولید هدر بدون --scoped-enums جهت تطابق با سورس
+          ./host_flatc_build/flatc --cpp -o lite/ lite/sentencepiece_lite.fbs
           cp lite/sentencepiece_lite_generated.h ./
 
       - name: Compile .so directly using Android Clang
@@ -40,7 +40,6 @@ jobs:
           
           mkdir -p output/${{ matrix.abi }}
           
-          # کامپایل مستقیم سورس‌های واقعی
           $CXX -std=c++20 -O3 -fPIC -shared \
             -I. -Ilite -Ihost_flatbuffers/include \
             lite/sentencepiece_lite.cc \
