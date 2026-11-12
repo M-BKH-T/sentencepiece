@@ -1,11 +1,18 @@
 #include <jni.h>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <memory>
 #include "sentencepiece_lite.h"
 
-// نگهداری نمونه مدل در رم native
-static std::unique_ptr<sentencepiece::SentencePieceLite> g_sp = nullptr;
+#ifdef SENTENCEPIECE_LITE_NAMESPACE
+using namespace sentencepiece::lite;
+#else
+using namespace sentencepiece;
+#endif
+
+// نگهداری نمونه به صورت سراسری در Native
+static std::unique_ptr<SentencePieceProcessor> g_sp = nullptr;
 
 extern "C" {
 
@@ -23,7 +30,7 @@ Java_com_logcat_puncfixer_SentencePieceLite_loadModel(
 
     std::string_view buffer_view(reinterpret_cast<const char*>(buf), len);
     
-    g_sp = std::make_unique<sentencepiece::SentencePieceLite>();
+    g_sp = std::make_unique<SentencePieceProcessor>();
     auto status = g_sp->LoadFromBuffer(buffer_view);
     
     env->ReleaseByteArrayElements(model_buffer, buf, JNI_ABORT);
