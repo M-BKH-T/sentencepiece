@@ -40,7 +40,9 @@ jobs:
           
           mkdir -p output/${{ matrix.abi }}
           
+          # کامپایل مستقل با ادغام کامل رانتایم C++ (بدون نیاز به libc++_shared.so)
           $CXX -std=c++20 -O3 -fPIC -shared \
+            -static-libstdc++ \
             -I. -Ilite -Ihost_flatbuffers/include \
             lite/sentencepiece_lite.cc \
             lite/jni_wrapper.cc \
