@@ -8,7 +8,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        abi: [arm64-v8a, armeabi-v7a]
+        include:
+          - abi: arm64-v8a
+            target: aarch64-linux-android21
+          - abi: armeabi-v7a
+            target: armv7a-linux-androideabi21
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -19,52 +23,37 @@ jobs:
           ndk-version: r26d
           add-to-path: true
 
-      - name: Ensure JNI wrapper is linked
+      - name: Generate FlatBuffers Header on Host
         run: |
-          if [ -f lite/jni_wrapper.cc ] && ! grep -q "jni_wrapper" lite/sentencepiece_lite.cc; then
-            echo "" >> lite/sentencepiece_lite.cc
-            echo '#include "jni_wrapper.cc"' >> lite/sentencepiece_lite.cc
-          fi
-
-      - name: Configure CMake for Android ABI
-        run: |
-          mkdir -p build_${{ matrix.abi }}
-          cd build_${{ matrix.abi }}
-          
-          cmake ../lite \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=${{ matrix.abi }} \
-            -DANDROID_PLATFORM=android-21 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_STANDARD=20 \
-            -DBUILD_SHARED_LIBS=ON
-
-      - name: Build Host flatc & Replace Native Binary
-        run: |
-          cd build_${{ matrix.abi }}
-          
-          # ۱. بیلد کامپایلر flatc مخصوص هاست اوبونتو با سورس دانلود شده
-          cmake -B host_flatc_build -S _deps/flatbuffers-src -DFLATBUFFERS_BUILD_TESTS=OFF
+          # بیلد سریع کامپایلر بومی flatc و ساخت هدر
+          git clone --depth 1 https://github.com/google/flatbuffers.git host_flatbuffers
+          cmake -B host_flatc_build -S host_flatbuffers -DFLATBUFFERS_BUILD_TESTS=OFF
           cmake --build host_flatc_build --target flatc -j$(nproc)
           
-          # ۲. ساخت اولیه تارگت flatc در بیلد اصلی
-          cmake --build . --target flatc -j$(nproc)
-          
-          # ۳. جایگزینی باینری هاست به جای باینری کراس‌شده اندروید
-          cp -f host_flatc_build/flatc _deps/flatbuffers-build/flatc
-          chmod +x _deps/flatbuffers-build/flatc
+          # ساخت هدر sentencepiece_lite_generated.h
+          ./host_flatc_build/flatc --cpp --scoped-enums -o lite/ lite/sentencepiece_lite.fbs
+          ls -l lite/sentencepiece_lite_generated.h
 
-      - name: Compile SentencePiece Lite shared library (.so)
+      - name: Compile .so directly using Android Clang
         run: |
-          cd build_${{ matrix.abi }}
-          cmake --build . --config Release --target sentencepiece_lite -j$(nproc)
+          TOOLCHAIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin
+          CXX=$TOOLCHAIN/${{ matrix.target }}-clang++
           
-          # پوشه‌بندی استاندارد jniLibs
           mkdir -p output/${{ matrix.abi }}
-          find . -name "*.so" -exec cp {} output/${{ matrix.abi }}/ \;
+          
+          # کامپایل مستقیم با Clang NDK
+          $CXX -std=c++20 -O3 -fPIC -shared \
+            -I. -Ilite -Ihost_flatbuffers/include \
+            lite/sentencepiece_lite.cc \
+            lite/sentencepiece_lite_encoder.cc \
+            lite/jni_wrapper.cc \
+            -llog \
+            -o output/${{ matrix.abi }}/libsentencepiece_lite.so
+            
+          ls -lh output/${{ matrix.abi }}/libsentencepiece_lite.so
 
       - name: Upload ABI Artifact
         uses: actions/upload-artifact@v4
         with:
           name: sentencepiece-lite-${{ matrix.abi }}
-          path: build_${{ matrix.abi }}/output/
+          path: output/
