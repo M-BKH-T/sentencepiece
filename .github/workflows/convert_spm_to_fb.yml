@@ -1,4 +1,4 @@
-name: Convert spiece.model to FlatBuffers (.spm.fb)
+name: Convert tokenizer.model to FlatBuffers (tokenizer.spm.fb)
 
 on:
   workflow_dispatch:
@@ -15,10 +15,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libprotobuf-dev protobuf-compiler libabsl-dev flatbuffers-compiler libflatbuffers-dev ninja-build
 
-      - name: Download Official spiece.model (837KB)
+      - name: Verify Local tokenizer.model
         run: |
-          curl -L -o spiece.model "https://huggingface.co/HooshvareLab/albert-fa-zwnj-base-v2/resolve/main/spiece.model"
-          ls -lh spiece.model
+          if [ ! -f "tokenizer.model" ]; then
+            echo "❌ Error: tokenizer.model not found in root directory!"
+            exit 1
+          fi
+          ls -lh tokenizer.model
 
       - name: Build spm_to_fb Converter Tool
         run: |
@@ -35,12 +38,12 @@ jobs:
       - name: Convert Model to FlatBuffers
         run: |
           ./build_converter/spm_to_fb \
-            --model=spiece.model \
-            --output=spiece.spm.fb
-          ls -lh spiece.spm.fb
+            --model=tokenizer.model \
+            --output=tokenizer.spm.fb
+          ls -lh tokenizer.spm.fb
 
       - name: Upload Converted Model Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sentencepiece-flatbuffer-model
-          path: spiece.spm.fb
+          name: flatbuffer-tokenizer
+          path: tokenizer.spm.fb
